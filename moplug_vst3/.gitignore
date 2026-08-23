@@ -15,6 +15,9 @@ Testing/
 
 .cache/
 
+../.vscode/
+.vscode/
+
 *.o
 *.obj
 *.a
