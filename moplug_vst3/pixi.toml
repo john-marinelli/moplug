@@ -1,0 +1,11 @@
+[workspace]
+authors = ["john-marinelli <marinelli.john@proton.me>"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
+name = "moplug_vst3"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+mojo = ">=1.0.0,<2"
