@@ -44,13 +44,13 @@ size_t mojo_dsp_state_size(
     MojoDSPHandle handle
 );
 
-bool mojo_dsp_write_state(
+bool mojo_dsp_serialize_state(
     MojoDSPHandle handle,
     void* destination,
     size_t destinationSize
 );
 
-bool mojo_dsp_read_state(
+bool mojo_dsp_deserialize_state(
     MojoDSPHandle handle,
     const void* source,
     size_t sourceSize

@@ -11,6 +11,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # paths
 
 set(VST3_SDK_ROOT
@@ -127,6 +129,14 @@ target_include_directories(
 
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+	"${VST3_SDK_ROOT}"
+)
+
+target_compile_definitions(
+    mojo_vst3_plugin
+    PRIVATE
+        $<$<CONFIG:Debug>:_DEBUG>
+        $<$<CONFIG:Release>:NDEBUG>
 )
 
 target_sources(
@@ -194,6 +204,7 @@ if(MOJO_VST3_BUILD_TESTS)
 
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
+	    "${VST3_SDK_ROOT}"
     )
 
     add_test(

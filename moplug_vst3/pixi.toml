@@ -6,6 +6,10 @@ platforms = ["osx-arm64"]
 version = "0.1.0"
 
 [tasks]
+config = "cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug"
+build = "cmake --build build"
+clean = "rm -rf build"
+
 
 [dependencies]
 mojo = ">=1.0.0,<2"
