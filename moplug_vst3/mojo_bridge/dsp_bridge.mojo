@@ -1,7 +1,7 @@
 from std.memory import Pointer, alloc, Layout
 from std.origin import MutUntrackedOrigin
 
-from .types import FChannelPtr, VstAudioBlock
+from mojo_bridge.types import FChannelPtr, VstAudioBlock
 
 
 # TODO: import actual plugin, this is a testing stub

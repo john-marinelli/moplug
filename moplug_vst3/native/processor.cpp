@@ -19,7 +19,7 @@ Processor::~Processor()
 {
     if (mojo_)
     {
-        mojo_dsp_destroy();
+        mojo_dsp_destroy(mojo_);
         mojo_ = nullptr;
     }
 }
@@ -58,7 +58,7 @@ tresult PLUGIN_API Processor::terminate()
 {
     if (mojo_)
     {
-        mojo_dsp_destroy();
+        mojo_dsp_destroy(mojo_);
         mojo_ = nullptr;
     }
 

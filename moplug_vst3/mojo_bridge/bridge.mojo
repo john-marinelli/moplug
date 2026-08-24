@@ -1,8 +1,8 @@
 from std.runtime import initialize_runtime
 from std.memory import MutOpaquePointer, ImmOpaquePointer, bitcast
 from std.origin import MutUntrackedOrigin, ImmUntrackedOrigin
-from .types import FChannelPtr
-from .dsp_bridge import (
+from mojo_bridge.types import FChannelPtr
+from mojo_bridge.dsp_bridge import (
     DspPointer,
     DspBridge,
     create_dsp,
@@ -12,7 +12,7 @@ from .dsp_bridge import (
     process_dsp,
     set_dsp_parameter,
 )
-from .state_bridge import (
+from mojo_bridge.state_bridge import (
     MutBytes,
     ImmBytes,
     dsp_state_size,

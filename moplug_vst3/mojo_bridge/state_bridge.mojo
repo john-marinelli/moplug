@@ -2,7 +2,7 @@ from std.memory import Pointer
 from std.origin import MutUntrackedOrigin, ImmUntrackedOrigin
 from std.memory import bitcast
 
-from .dsp_bridge import DspPointer
+from mojo_bridge.dsp_bridge import DspPointer
 
 comptime MutBytes = Pointer[UInt8, MutUntrackedOrigin]
 comptime ImmBytes = Pointer[UInt8, ImmUntrackedOrigin]

@@ -11,7 +11,7 @@ typedef void* MojoDSPHandle;
 
 MojoDSPHandle mojo_dsp_create();
 
-void mojo_dsp_destroy();
+void mojo_dsp_destroy(MojoDSPHandle handle);
 
 void mojo_dsp_prepare(
     MojoDSPHandle handle,
