@@ -1,5 +1,5 @@
 #include "processor.h"
-#include "ids.h"
+#include "bridge.h"
 
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
@@ -10,9 +10,10 @@ namespace MoPlugVst3 {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-Processor::Processor()
+Processor::Processor(const PluginDescriptor* descriptor, Steinberg::FUID controllerFuid)
+    : descriptor_(descriptor)
 {
-    setControllerClass(ControllerUID);
+    setControllerClass(controllerFuid);
 }
 
 Processor::~Processor()
@@ -22,6 +23,13 @@ Processor::~Processor()
         mojo_dsp_destroy(mojo_);
         mojo_ = nullptr;
     }
+}
+Steinberg::FUnknown* Processor::createInstance(void* context)
+{
+    auto* processorContext = static_cast<ProcessorCreateContext*>(context);
+    return static_cast<Steinberg::Vst::IAudioProcessor*>(
+        new Processor(processorContext->descriptor, processorContext->controllerFUID)
+    );
 }
 
 tresult PLUGIN_API Processor::initialize(FUnknown* context)
@@ -76,6 +84,18 @@ tresult PLUGIN_API Processor::setupProcessing(
 
     if (result != kResultOk)
         return result;
+
+    const int32 inputBusCount = getBusCount(MediaTypes::kAudio, BusDirections::kInput);
+    const int32 outputBusCount = getBusCount(MediaTypes::kAudio, BusDirections::kOutput);
+
+    input_buses_.resize(static_cast<size_t>(inputBusCount));
+    output_buses_.resize(static_cast<size_t>(outputBusCount));
+
+    input_events_.resize(MAX_EVENTS);
+    output_events_.resize(MAX_EVENTS);
+
+    input_params_.resize(MAX_PARAM_CHANGES);
+    output_params_.resize(MAX_PARAM_CHANGES);
 
     if (mojo_)
     {
@@ -163,11 +183,106 @@ tresult PLUGIN_API Processor::process(
     if (data.numSamples <= 0)
         return kResultOk;
 
-    if (data.symbolicSampleSize != kSample32)
-        return kResultFalse;
-
     if (data.numInputs <= 0 || data.numOutputs <= 0)
         return kResultOk;
+
+    MoPlugProcessData block {};
+
+    block.frames = data.numSamples;
+
+    if (data.symbolicSampleSize == kSample32)
+        block.sample_format = MOPLUG_SAMPLE_F32;
+    else
+        block.sample_format = MOPLUG_SAMPLE_F64;
+
+    
+    const int32 inputBusCount = std::min(data.numInputs, static_cast<int32>(input_buses_.size()));
+
+    for (int32 i = 0; i < inputBusCount; ++i)
+    {
+        AudioBusBuffers& source = data.inputs[i];
+
+        MoPlugAudioBus& destination = input_buses_[i];
+
+        destination.channel_count = source.numChannels;
+
+        if (data.symbolicSampleSize == kSample32)
+        {
+            destination.channels = reinterpret_cast<void**>(source.channelBuffers32);
+        }
+        else
+        {
+            destination.channels = reinterpret_cast<void**>(source.channelBuffers64);
+        }
+    }
+
+    block.inputs = input_buses_.data();
+    block.input_bus_count = inputBusCount;
+
+    const int32 outputBusCount = std::min(
+        data.numOutputs, static_cast<int32>(output_buses_.size())
+    );
+
+    for (int32 i = 0; i < outputBusCount; ++i)
+    {
+        AudioBusBuffers& source = data.outputs[i];
+
+        MoPlugAudioBus& destination = output_buses_[i];
+
+        destination.channel_count = source.numChannels;
+
+        if (data.symbolicSampleSize == kSample32)
+        {
+            destination.channels = reinterpret_cast<void**>(source.channelBuffers32);
+        }
+        else
+        {
+            destination.channels = reinterpret_cast<void**>(source.channelBuffers64);
+        }
+    }
+
+    block.outputs = output_buses_.data();
+    block.output_bus_count = outputBusCount;
+
+    int32 inParamCount = 0;
+
+    if (data.inputParameterChanges)
+    {
+        const int32 qCount = data.inputParameterChanges->getParameterCount();
+
+        for (int32 qi = 0; qi < qCount; ++qi)
+        {
+            IParamValueQueue* queue = data.inputParameterChanges->getParameterData(qi);
+
+            if (!queue)
+                continue;
+
+            const ParamID id = queue->getParameterId();
+            const int32 pCount = queue->getPointCount();
+
+            for (int32 pi = 0; pi < pCount; ++pi)
+            {
+                if (inParamCount >= static_cast<int32>(input_params_.size()))
+                    break;
+
+                int32 sampleOffset = 0;
+                ParamValue value = 0.0;
+
+                if (queue->getPoint(pi, sampleOffset, value) != kResultOk)
+                    continue;
+
+                MoPlugParamChange& destination = input_params_[inParamCount++];
+
+                destination.id = static_cast<uint32_t>(id);
+                destination.value = value;
+                destination.sample_offset = sampleOffset;
+            }
+        }
+    }
+
+    block.
+
+
 
     AudioBusBuffers& input = data.inputs[0];
     AudioBusBuffers& output = data.outputs[0];
@@ -175,13 +290,17 @@ tresult PLUGIN_API Processor::process(
     if (!input.channelBuffers32 || !output.channelBuffers32)
         return kResultFalse;
 
+    VstAudioBlock block{
+        .inputs = input.channelBuffers32,
+        .outputs = output.channelBuffers32,
+        .input_channels = input.numChannels,
+        .output_channels = output.numChannels,
+        .frames = data.numSamples,
+    };
+
     mojo_dsp_process_f32(
         mojo_,
-        input.channelBuffers32,
-        output.channelBuffers32,
-        input.numChannels,
-        output.numChannels,
-        data.numSamples
+        &block
     );
 
     return kResultOk;

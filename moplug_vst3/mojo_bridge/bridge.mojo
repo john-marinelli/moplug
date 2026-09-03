@@ -19,6 +19,7 @@ from mojo_bridge.state_bridge import (
     write_dsp_state,
     read_dsp_state,
 )
+from mojo_bridge.types import VstAudioBlockPtr
 
 comptime MutHandle = MutOpaquePointer[MutUntrackedOrigin]
 comptime ImmHandle = ImmOpaquePointer[ImmUntrackedOrigin]
@@ -83,19 +84,13 @@ def mojo_dsp_set_parameter(
 @export("mojo_dsp_process_f32")
 def mojo_dsp_process_f32(
     handle: MutHandle,
-    inputs: FChannelPtr,
-    outputs: FChannelPtr,
-    input_channels: Int32,
-    output_channels: Int32,
-    frames: Int32,
+    block_ptr: VstAudioBlockPtr,
 ) abi("C"):
+    var block = block_ptr[]
+
     process_dsp(
         _dsp_from_handle(handle),
-        inputs,
-        outputs,
-        input_channels,
-        output_channels,
-        frames,
+        block,
     )
 
 

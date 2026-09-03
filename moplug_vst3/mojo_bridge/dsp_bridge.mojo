@@ -46,7 +46,7 @@ struct DspBridge:
 
     def process(
         mut self,
-        block: VstAudioBlock,
+        mut block: VstAudioBlock,
     ):
         var channels = block.input_channels
 
@@ -58,6 +58,11 @@ struct DspBridge:
             var output = block.outputs[unsafe_offset=channel]
 
             for frame in range(block.frames):
+                block.set_out_frame(
+                    channel,
+                    frame,
+                    block.get_in_frame(channel, frame) * self.gain
+                )
                 output[unsafe_offset=frame] = (
                     input[unsafe_offset=frame] * self.gain
                 )
@@ -107,14 +112,6 @@ def set_dsp_parameter(
 
 def process_dsp(
     pointer: DspPointer,
-    inputs: FChannelPtr,
-    outputs: FChannelPtr,
-    input_channels: Int32,
-    output_channels: Int32,
-    frames: Int32,
+    mut block: VstAudioBlock,
 ):
-    var block = VstAudioBlock(
-        inputs, outputs, Int(input_channels), Int(output_channels), Int(frames)
-    )
-
     pointer[].process(block)

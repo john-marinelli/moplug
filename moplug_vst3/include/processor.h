@@ -7,22 +7,24 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
+#include <vector>
 
 namespace MoPlugVst3 {
+
+typedef struct ProcessorCreateContext {
+    const PluginDescriptor* descriptor;
+    Steinberg::FUID controllerFUID;
+} ProcessorCreateContext;
 
 class Processor final
     : public Steinberg::Vst::AudioEffect
 {
 public:
-    Processor();
+    explicit Processor(const PluginDescriptor* descriptor, Steinberg::FUID controllerFuid);
     ~Processor();
 
-    static Steinberg::FUnknown* createInstance(void*)
-    {
-        return static_cast<Steinberg::Vst::IAudioProcessor*>(
-            new Processor()
-        );
-    }
+    static Steinberg::FUnknown* createInstance(void* context);
+
 
     Steinberg::tresult PLUGIN_API initialize(
         Steinberg::FUnknown* context
@@ -63,6 +65,20 @@ private:
 
     double sampleRate_ = 44100.0;
     Steinberg::int32 maxBlockSize_ = 0;
+
+    const PluginDescriptor* descriptor_;
+
+    std::vector<MoPlugAudioBus> input_buses_;
+    std::vector<MoPlugAudioBus> output_buses_;
+
+    std::vector<MoPlugEvent> input_events_;
+    std::vector<MoPlugEvent> output_events_;
+
+    std::vector<MoPlugParamChange> input_params_;
+    std::vector<MoPlugParamChange> output_params_;
+
+    static constexpr size_t MAX_EVENTS = 4096;
+    static constexpr size_t MAX_PARAM_CHANGES = 8192;
 };
 
 }
