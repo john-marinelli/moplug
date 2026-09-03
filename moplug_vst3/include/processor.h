@@ -12,7 +12,7 @@
 namespace MoPlugVst3 {
 
 typedef struct ProcessorCreateContext {
-    const PluginDescriptor* descriptor;
+    const MoPlugDescriptor* descriptor;
     Steinberg::FUID controllerFUID;
 } ProcessorCreateContext;
 
@@ -20,7 +20,7 @@ class Processor final
     : public Steinberg::Vst::AudioEffect
 {
 public:
-    explicit Processor(const PluginDescriptor* descriptor, Steinberg::FUID controllerFuid);
+    explicit Processor(const MoPlugDescriptor* descriptor, Steinberg::FUID controllerFuid);
     ~Processor();
 
     static Steinberg::FUnknown* createInstance(void* context);
@@ -57,8 +57,12 @@ public:
     ) override;
 
 private:
-    void applyParameterChanges(
-        Steinberg::Vst::IParameterChanges* changes
+    static Steinberg::Vst::SpeakerArrangement speakerArrangementForChannels(int32_t channels);
+    Steinberg::tresult addPluginBus(
+        const char* cBusName,
+        int32_t busChannels,
+        MoPlugBusType busType,
+        MoPlugBusDirection busDirection
     );
 
     MojoDSPHandle mojo_ = nullptr;
@@ -66,7 +70,7 @@ private:
     double sampleRate_ = 44100.0;
     Steinberg::int32 maxBlockSize_ = 0;
 
-    const PluginDescriptor* descriptor_;
+    const MoPlugDescriptor* descriptor_;
 
     std::vector<MoPlugAudioBus> input_buses_;
     std::vector<MoPlugAudioBus> output_buses_;
@@ -76,6 +80,8 @@ private:
 
     std::vector<MoPlugParamChange> input_params_;
     std::vector<MoPlugParamChange> output_params_;
+
+    MoPlugTransport transport_ {};
 
     static constexpr size_t MAX_EVENTS = 4096;
     static constexpr size_t MAX_PARAM_CHANGES = 8192;

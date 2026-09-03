@@ -9,7 +9,7 @@ class Controller final
     : public Steinberg::Vst::EditController
 {
 public:
-    explicit Controller(const PluginDescriptor* descriptor);
+    explicit Controller(const MoPlugDescriptor* descriptor);
     ~Controller() override = default;
 
     static Steinberg::FUnknown* createInstance(void* context);
@@ -19,6 +19,6 @@ public:
     Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream* state) override;
 
 private:
-    const PluginDescriptor* descriptor_;
+    const MoPlugDescriptor* descriptor_;
 };
 }

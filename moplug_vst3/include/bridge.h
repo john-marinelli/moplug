@@ -9,8 +9,8 @@ extern "C" {
 
 typedef enum
 {
-    MOPLUG_SAMPLE_F32,
-    MOPLUG_SAMPLE_F64
+    MOPLUG_SAMPLE_F32 = 0,
+    MOPLUG_SAMPLE_F64 = 1
 } MoPlugSampleFormat;
 
 typedef struct
@@ -21,10 +21,10 @@ typedef struct
 
 typedef enum
 {
-    MOPLUG_EVENT_NOTE_ON,
-    MOPLUG_EVENT_NOTE_OFF,
-    MOPLUG_EVENT_POLY_PRESSURE,
-    MOPLUG_EVENT_OTHER
+    MOPLUG_EVENT_NOTE_ON = 0,
+    MOPLUG_EVENT_NOTE_OFF = 1,
+    MOPLUG_EVENT_POLY_PRESSURE = 2,
+    MOPLUG_EVENT_OTHER = 3
 } MoPlugEventType;
 
 typedef struct
@@ -32,9 +32,11 @@ typedef struct
     MoPlugEventType type;
 
     int32_t sample_offset;
-    int32_t channel;
+    int32_t bus_index;
 
-    int32_t note;
+    int16_t channel;
+    int16_t pitch;
+
     int32_t note_id;
 
     float value;
@@ -98,25 +100,55 @@ typedef struct
 
 typedef void* MojoDSPHandle;
 
-typedef struct ParamDescriptor
+typedef struct MoPlugParamDescriptor
 {
     uint32_t id;
+
     const char* name;
     const char* units;
+
     double default_value;
+
     uint32_t step_count;
     uint32_t flags;
-} ParamDescriptor;
+} MoPlugParamDescriptor;
 
-typedef struct PluginDescriptor
+typedef enum
+{
+    MOPLUG_BUS_AUDIO = 0,
+    MOPLUG_BUS_EVENT = 1
+} MoPlugBusType;
+
+typedef enum
+{
+    MOPLUG_BUS_INPUT = 0,
+    MOPLUG_BUS_OUTPUT = 1
+} MoPlugBusDirection;
+
+typedef struct MoPlugBusDescriptor
+{
+    const char* name;
+
+    MoPlugBusType type;
+    MoPlugBusDirection direction;
+
+    int32_t channels;
+
+    uint32_t flags;
+} MoPlugBusDescriptor;
+
+typedef struct MoPlugDescriptor
 {
     const char* stable_id;
     const char* display_name;
     const char* version;
 
-    uint32_t parameter_count;
-    const ParamDescriptor* parameters;
-} PluginInfo;
+    uint32_t bus_count;
+    const MoPlugBusDescriptor* buses;
+
+    uint32_t param_count;
+    const MoPlugParamDescriptor* params;
+} MoPlugDescriptor;
 
 typedef struct {
     float** inputs;
@@ -128,7 +160,7 @@ typedef struct {
 
 } VstAudioBlock;
 
-const PluginDescriptor* mojo_get_plugin_descriptor();
+const MoPlugDescriptor* mojo_get_plugin_descriptor();
 
 MojoDSPHandle mojo_dsp_create();
 

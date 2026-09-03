@@ -11,14 +11,14 @@ namespace MoPlugVst3 {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-Controller::Controller(const PluginDescriptor* descriptor) 
+Controller::Controller(const MoPlugDescriptor* descriptor) 
     : descriptor_(descriptor)
 {
 }
 
 Steinberg::FUnknown* Controller::createInstance(void* context) 
 {
-    auto* descriptor = static_cast<const PluginDescriptor*>(context);
+    auto* descriptor = static_cast<const MoPlugDescriptor*>(context);
 
     return static_cast<Steinberg::Vst::IEditController*>(new Controller(descriptor));
 }
@@ -30,9 +30,9 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context)
     if (result != kResultOk)
         return result;
 
-    for (uint32_t i = 0; i < descriptor_-> parameter_count; i++)
+    for (uint32_t i = 0; i < descriptor_->param_count; i++)
     {
-        const auto& param = descriptor_->parameters[i];
+        const auto& param = descriptor_->params[i];
 
         Steinberg::Vst::ParameterInfo info {};
 

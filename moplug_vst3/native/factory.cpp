@@ -15,7 +15,7 @@
 #define PLUGIN_VERSION "0.1.0"
 
 
-static bool registerClasses(Steinberg::CPluginFactory& factory, const PluginDescriptor* descriptor)
+static bool registerClasses(Steinberg::CPluginFactory& factory, const MoPlugDescriptor* descriptor)
 {
     Steinberg::FUID controllerFUID= MoPlugVst3::makeFUID(
         std::string(descriptor->stable_id) + ".controller"
@@ -29,7 +29,7 @@ static bool registerClasses(Steinberg::CPluginFactory& factory, const PluginDesc
     factory.registerClass(
         &controllerInfo,
         MoPlugVst3::Controller::createInstance,
-        const_cast<PluginDescriptor*>(descriptor)
+        const_cast<MoPlugDescriptor*>(descriptor)
     );
 
     MoPlugVst3::ProcessorCreateContext processorContext(
@@ -55,7 +55,7 @@ static bool registerClasses(Steinberg::CPluginFactory& factory, const PluginDesc
 SMTG_EXPORT_SYMBOL
 Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory()
 {
-    static const PluginDescriptor* desc = mojo_get_plugin_descriptor();
+    static const MoPlugDescriptor* desc = mojo_get_plugin_descriptor();
     static Steinberg::PFactoryInfo factoryInfo(
         "Company name",
         "website",

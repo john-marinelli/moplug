@@ -82,7 +82,7 @@ def mojo_dsp_set_parameter(
 
 
 @export("mojo_dsp_process_f32")
-def mojo_dsp_process_f32(
+def mojo_dsp_process(
     handle: MutHandle,
     block_ptr: VstAudioBlockPtr,
 ) abi("C"):

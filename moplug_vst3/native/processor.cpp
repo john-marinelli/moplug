@@ -1,7 +1,11 @@
 #include "processor.h"
 #include "bridge.h"
 
+#include "pluginterfaces/base/ustring.h"
+#include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/vsttypes.h"
 
 #include <vector>
 
@@ -10,7 +14,7 @@ namespace MoPlugVst3 {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-Processor::Processor(const PluginDescriptor* descriptor, Steinberg::FUID controllerFuid)
+Processor::Processor(const MoPlugDescriptor* descriptor, Steinberg::FUID controllerFuid)
     : descriptor_(descriptor)
 {
     setControllerClass(controllerFuid);
@@ -32,6 +36,56 @@ Steinberg::FUnknown* Processor::createInstance(void* context)
     );
 }
 
+static Steinberg::Vst::SpeakerArrangement speakerArrangementForChannels(int32_t channels)
+{
+    switch (channels)
+    {
+        case 1:
+            return SpeakerArr::kMono;
+        case 2:
+            return SpeakerArr::kStereo;
+        default:
+            return SpeakerArr::kEmpty;
+    }
+}
+
+tresult Processor::addPluginBus(
+    const char* cBusName,
+    int32_t busChannels,
+    MoPlugBusType busType,
+    MoPlugBusDirection busDirection
+)
+{
+    Steinberg::Vst::String128 busName {};
+    Steinberg::UString(busName, 128).fromAscii(cBusName);
+
+    if (busType == MOPLUG_BUS_AUDIO)
+    {
+        auto arrangement = speakerArrangementForChannels(busChannels);
+        if (busDirection == MOPLUG_BUS_INPUT)
+        {
+            addAudioInput(busName, arrangement);
+        }
+        else
+        {
+            addAudioOutput(busName, arrangement);
+        }
+    }
+    else if (busType == MOPLUG_BUS_EVENT)
+    {
+        if (busDirection == MOPLUG_BUS_INPUT)
+        {
+            addEventInput(busName, busChannels);
+        }
+        else
+        {
+            addEventOutput(busName, busChannels);
+        }
+    }
+
+    return kResultOk;
+}
+
 tresult PLUGIN_API Processor::initialize(FUnknown* context)
 {
     const auto result = AudioEffect::initialize(context);
@@ -39,20 +93,11 @@ tresult PLUGIN_API Processor::initialize(FUnknown* context)
     if (result != kResultOk)
         return result;
 
-    addAudioInput(
-        STR16("Stereo In"),
-        SpeakerArr::kStereo
-    );
-
-    addAudioOutput(
-        STR16("Stereo Out"),
-        SpeakerArr::kStereo
-    );
-
-    addEventInput(
-        STR16("Event In"),
-        1
-    );
+    for (uint32_t i = 0; i < descriptor_->bus_count; ++i)
+    {
+        const auto& bus = descriptor_->buses[i];
+        addPluginBus(bus.name, bus.channels, bus.type, bus.direction);
+    }
 
     mojo_ = mojo_dsp_create();
 
@@ -129,62 +174,12 @@ tresult PLUGIN_API Processor::canProcessSampleSize(int32 symbolicSampleSize)
     return kResultFalse;
 }
 
-void Processor::applyParameterChanges(IParameterChanges* changes)
-{
-    if (!changes || !mojo_)
-        return;
-
-    const int32 parameterCount = changes->getParameterCount();
-
-    for (int32 i = 0; i < parameterCount; ++i)
-    {
-        IParamValueQueue* queue = changes->getParameterData(i);
-        
-        if (!queue)
-            continue;
-
-        const int32 pointCount = queue->getPointCount();
-
-        if (pointCount <= 0)
-            continue;
-
-        // TODO: Simple implementation for testing
-        // this currently overwrites all but the last param change
-        // Implement sample offset in mojo_dsp_set_parameter
-        int32 sampleOffset = 0;
-        ParamValue value = 0.0;
-
-        if (
-            queue->getPoint(
-                pointCount - 1,
-                sampleOffset,
-                value
-            ) == kResultTrue
-        )
-        {
-            mojo_dsp_set_parameter(
-                mojo_,
-                queue->getParameterId(),
-                value
-            );
-        }
-    }
-}
-
 tresult PLUGIN_API Processor::process(
     ProcessData& data
 )
 {
     if (!mojo_)
         return kResultFalse;
-
-    applyParameterChanges(data.inputParameterChanges);
-
-    if (data.numSamples <= 0)
-        return kResultOk;
-
-    if (data.numInputs <= 0 || data.numOutputs <= 0)
-        return kResultOk;
 
     MoPlugProcessData block {};
 
@@ -280,28 +275,209 @@ tresult PLUGIN_API Processor::process(
         }
     }
 
-    block.
+    block.input_params = input_params_.data();
+    block.input_param_count = inParamCount;
 
+    int32 inEventCount = 0;
 
+    if (data.inputEvents)
+    {
+        const int32 eventCount = data.inputEvents->getEventCount();
 
-    AudioBusBuffers& input = data.inputs[0];
-    AudioBusBuffers& output = data.outputs[0];
+        for (int32 i = 0; i < eventCount; ++i)
+        {
+            if (inEventCount >= static_cast<int32>(input_events_.size()))
+                break;
 
-    if (!input.channelBuffers32 || !output.channelBuffers32)
-        return kResultFalse;
+            Event source {};
 
-    VstAudioBlock block{
-        .inputs = input.channelBuffers32,
-        .outputs = output.channelBuffers32,
-        .input_channels = input.numChannels,
-        .output_channels = output.numChannels,
-        .frames = data.numSamples,
-    };
+            if (data.inputEvents->getEvent(i, source) != kResultOk)
+                continue;
 
-    mojo_dsp_process_f32(
-        mojo_,
-        &block
-    );
+            MoPlugEvent converted {};
+
+            converted.sample_offset = source.sampleOffset;
+            converted.bus_index = source.busIndex;
+
+            bool supported = true;
+
+            switch (source.type)
+            {
+                case Event::kNoteOnEvent:
+                {
+                    converted.type = MOPLUG_EVENT_NOTE_ON;
+                    converted.channel = source.noteOn.channel;
+                    converted.pitch = source.noteOn.pitch;
+                    converted.note_id = source.noteOn.noteId;
+                    converted.value = source.noteOn.velocity;
+                    break;
+                }
+                case Event::kNoteOffEvent:
+                {
+                    converted.type = MOPLUG_EVENT_NOTE_OFF;
+                    converted.channel = source.noteOff.channel;
+                    converted.pitch = source.noteOff.pitch;
+                    converted.note_id = source.noteOff.noteId;
+                    converted.value = source.noteOff.velocity;
+                    break;
+                }
+                case Event::kPolyPressureEvent:
+                {
+                    converted.type = MOPLUG_EVENT_POLY_PRESSURE;
+                    converted.channel = source.polyPressure.channel;
+                    converted.pitch = source.polyPressure.pitch;
+                    converted.note_id = source.polyPressure.noteId;
+                    converted.value = source.polyPressure.pressure;
+                    break;
+                }
+                default:
+                {
+                    supported = false;
+                    break;
+                }
+            }
+
+            if (supported)
+            {
+                input_events_[inEventCount++] = converted;
+            }
+        }
+    }
+
+    block.input_events = input_events_.data();
+    block.input_event_count = inEventCount;
+
+    if (data.processContext)
+    {
+        const ProcessContext& source = *data.processContext;
+
+        transport_ = {};
+
+        transport_.state = source.state;
+        transport_.sample_rate = source.sampleRate;
+        transport_.project_time_samples = source.projectTimeSamples;
+
+        if (source.state & ProcessContext::kContTimeValid)
+        {
+            transport_.continuous_time_samples = source.continousTimeSamples;
+        }
+
+        if (source.state & ProcessContext::kProjectTimeMusicValid)
+        {
+            transport_.project_time_beats = source.projectTimeMusic;
+        }
+
+        if (source.state & ProcessContext::kBarPositionValid)
+        {
+            transport_.bar_position_beats = source.barPositionMusic;
+        }
+
+        if (source.state & ProcessContext::kTempoValid)
+        {
+            transport_.tempo = source.tempo;
+        }
+
+        if (source.state & ProcessContext::kTimeSigValid)
+        {
+            transport_.time_sig_numerator = source.timeSigNumerator;
+            transport_.time_sig_denominator = source.timeSigDenominator;
+        }
+
+        if (source.state & ProcessContext::kCycleValid)
+        {
+            transport_.cycle_start_beats = source.cycleStartMusic;
+            transport_.cycle_end_beats = source.cycleEndMusic;
+        }
+
+        block.transport = &transport_;
+    }
+    else
+    {
+        block.transport = nullptr;
+
+    }
+
+    block.output_events = output_events_.data();
+    block.output_event_capacity = static_cast<int32>(output_events_.size());
+    block.output_event_count = 0;
+
+    block.output_params = output_params_.data();
+    block.output_param_capacity = static_cast<int32>(output_params_.size());
+    block.output_param_count = 0;
+
+    // TODO: call plugin
+    
+    const int32 genEventCount = std::min(block.output_event_count, block.output_event_capacity);
+    const int32 genParamCount = std::min(block.output_param_count, block.output_param_capacity);
+
+    if (data.outputEvents)
+    {
+        for (int32 i = 0; i < genEventCount; ++i)
+        {
+            const MoPlugEvent& source = output_events_[i];
+
+            Event destination {};
+
+            destination.busIndex = source.bus_index;
+            destination.sampleOffset = source.sample_offset;
+
+            switch (source.type)
+            {
+                case MOPLUG_EVENT_NOTE_ON:
+                {
+                    destination.type = Event::kNoteOnEvent;
+                    destination.noteOn.channel = source.channel;
+                    destination.noteOn.pitch = source.pitch;
+                    destination.noteOn.noteId = source.note_id;
+                    destination.noteOn.velocity = source.value;
+                    destination.noteOn.tuning = 0.f;
+                    destination.noteOn.length = 0;
+                    data.outputEvents->addEvent(destination);
+                }
+                case MOPLUG_EVENT_NOTE_OFF:
+                {
+                    destination.type = Event::kNoteOffEvent;
+                    destination.noteOff.channel = source.channel;
+                    destination.noteOff.pitch = source.pitch;
+                    destination.noteOff.noteId = source.note_id;
+                    destination.noteOff.velocity = source.value;
+                    destination.noteOff.tuning = 0.f;
+                    data.outputEvents->addEvent(destination);
+                }
+                case MOPLUG_EVENT_POLY_PRESSURE:
+                {
+                    destination.type = Event::kPolyPressureEvent;
+                    destination.polyPressure.channel = source.channel;
+                    destination.polyPressure.pitch = source.pitch;
+                    destination.polyPressure.noteId = source.note_id;
+                    destination.polyPressure.pressure = source.value;
+                    data.outputEvents->addEvent(destination);
+                }
+
+            }
+        }
+    }
+
+    if (data.outputParameterChanges)
+    {
+        for (int32 i = 0; i < genParamCount; ++i)
+        {
+            const MoPlugParamChange& source = output_params_[i];
+
+            const ParamID id = static_cast<ParamID>(source.id);
+
+            int32 qIndex = 0;
+
+            IParamValueQueue* queue = data.outputParameterChanges->addParameterData(id, qIndex);
+
+            if (!queue)
+                continue;
+
+            int32 pIndex = 0;
+
+            queue->addPoint(source.sample_offset, source.value, pIndex);
+        }
+    }
 
     return kResultOk;
 }
