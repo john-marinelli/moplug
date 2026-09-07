@@ -1,7 +1,7 @@
 from std.memory import Pointer, alloc, Layout
 from std.origin import MutUntrackedOrigin
 
-from mojo_bridge.types import FChannelPtr, VstAudioBlock
+from mojo_bridge.types import FChannelPtr, VstAudioBlock, MoPlugProcessData
 
 
 # TODO: import actual plugin, this is a testing stub
@@ -46,21 +46,24 @@ struct DspBridge:
 
     def process(
         mut self,
-        block: VstAudioBlock,
+        block: Pointer[MoPlugProcessData, MutUntrackedOrigin],
     ):
-        var channels = block.input_channels
+        for i in range(block[].input_param_count):
+            self.set_parameter(block[].input_params[unsafe_offset=i].id, block[].input_params[unsafe_offset=i].value)
 
-        if block.output_channels < channels:
-            channels = block.output_channels
+        ref in_bus = block[].inputs[unsafe_offset=0]
+        ref out_bus = block[].outputs[unsafe_offset=0]
+
+        var channels = in_bus.channel_count
+        if out_bus.channel_count < channels:
+            channels = out_bus.channel_count
 
         for channel in range(channels):
-            var input = block.inputs[unsafe_offset=channel]
-            var output = block.outputs[unsafe_offset=channel]
+            var input = in_bus.channels[unsafe_offset=channel]
+            var output = out_bus.channels[unsafe_offset=channel]
 
-            for frame in range(block.frames):
-                output[unsafe_offset=frame] = (
-                    input[unsafe_offset=frame] * self.gain
-                )
+            for frame in range(block[].frames):
+                output[unsafe_offset=frame] = (input[unsafe_offset=frame] * self.gain)
 
 
 comptime DspPointer = Pointer[DspBridge, MutUntrackedOrigin]
@@ -107,14 +110,6 @@ def set_dsp_parameter(
 
 def process_dsp(
     pointer: DspPointer,
-    inputs: FChannelPtr,
-    outputs: FChannelPtr,
-    input_channels: Int32,
-    output_channels: Int32,
-    frames: Int32,
+    block: Pointer[MoPlugProcessData, MutUntrackedOrigin],
 ):
-    var block = VstAudioBlock(
-        inputs, outputs, Int(input_channels), Int(output_channels), Int(frames)
-    )
-
     pointer[].process(block)

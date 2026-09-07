@@ -7,22 +7,24 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
+#include <vector>
 
 namespace MoPlugVst3 {
+
+typedef struct ProcessorCreateContext {
+    const MoPlugDescriptor* descriptor;
+    Steinberg::FUID controllerFUID;
+} ProcessorCreateContext;
 
 class Processor final
     : public Steinberg::Vst::AudioEffect
 {
 public:
-    Processor();
+    explicit Processor(const MoPlugDescriptor* descriptor, Steinberg::FUID controllerFuid);
     ~Processor();
 
-    static Steinberg::FUnknown* createInstance(void*)
-    {
-        return static_cast<Steinberg::Vst::IAudioProcessor*>(
-            new Processor()
-        );
-    }
+    static Steinberg::FUnknown* createInstance(void* context);
+
 
     Steinberg::tresult PLUGIN_API initialize(
         Steinberg::FUnknown* context
@@ -55,14 +57,34 @@ public:
     ) override;
 
 private:
-    void applyParameterChanges(
-        Steinberg::Vst::IParameterChanges* changes
+    static Steinberg::Vst::SpeakerArrangement speakerArrangementForChannels(int32_t channels);
+    Steinberg::tresult addPluginBus(
+        const char* cBusName,
+        int32_t busChannels,
+        MoPlugBusType busType,
+        MoPlugBusDirection busDirection
     );
 
     MojoDSPHandle mojo_ = nullptr;
 
     double sampleRate_ = 44100.0;
     Steinberg::int32 maxBlockSize_ = 0;
+
+    const MoPlugDescriptor* descriptor_;
+
+    std::vector<MoPlugAudioBus> input_buses_;
+    std::vector<MoPlugAudioBus> output_buses_;
+
+    std::vector<MoPlugEvent> input_events_;
+    std::vector<MoPlugEvent> output_events_;
+
+    std::vector<MoPlugParamChange> input_params_;
+    std::vector<MoPlugParamChange> output_params_;
+
+    MoPlugTransport transport_ {};
+
+    static constexpr size_t MAX_EVENTS = 4096;
+    static constexpr size_t MAX_PARAM_CHANGES = 8192;
 };
 
 }

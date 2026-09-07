@@ -1,7 +1,7 @@
 from std.runtime import initialize_runtime
-from std.memory import MutOpaquePointer, ImmOpaquePointer, bitcast
+from std.memory import MutOpaquePointer, ImmOpaquePointer, bitcast, Layout, alloc
 from std.origin import MutUntrackedOrigin, ImmUntrackedOrigin
-from mojo_bridge.types import FChannelPtr
+from mojo_bridge.types import FChannelPtr, MoPlugDescriptor, MoPlugBusDescriptor, MoPlugParamDescriptor, MoPlugProcessData, leak_c_str
 from mojo_bridge.dsp_bridge import (
     DspPointer,
     DspBridge,
@@ -19,6 +19,7 @@ from mojo_bridge.state_bridge import (
     write_dsp_state,
     read_dsp_state,
 )
+from mojo_bridge.types import VstAudioBlockPtr
 
 comptime MutHandle = MutOpaquePointer[MutUntrackedOrigin]
 comptime ImmHandle = ImmOpaquePointer[ImmUntrackedOrigin]
@@ -80,22 +81,14 @@ def mojo_dsp_set_parameter(
     set_dsp_parameter(_dsp_from_handle(handle), parameter_id, normalized_value)
 
 
-@export("mojo_dsp_process_f32")
-def mojo_dsp_process_f32(
+@export("mojo_dsp_process")
+def mojo_dsp_process(
     handle: MutHandle,
-    inputs: FChannelPtr,
-    outputs: FChannelPtr,
-    input_channels: Int32,
-    output_channels: Int32,
-    frames: Int32,
+    block_ptr: Pointer[MoPlugProcessData, MutUntrackedOrigin],
 ) abi("C"):
     process_dsp(
         _dsp_from_handle(handle),
-        inputs,
-        outputs,
-        input_channels,
-        output_channels,
-        frames,
+        block_ptr,
     )
 
 
@@ -128,3 +121,33 @@ def mojo_dsp_deserialize_state(
         source,
         source_size,
     )
+
+@export("mojo_get_plugin_descriptor")
+def mojo_get_plugin_descriptor() abi("C") -> Pointer[MoPlugDescriptor, ImmUntrackedOrigin]:
+    var bus_owned = alloc(Layout[MoPlugBusDescriptor](count=2))
+    var buses = bus_owned^.unsafe_leak()
+    buses.unsafe_offset(0).unsafe_write(MoPlugBusDescriptor(leak_c_str("Input"), 0, 0, 2, 0))
+    buses.unsafe_offset(1).unsafe_write(MoPlugBusDescriptor(leak_c_str("Output"), 0, 1, 2, 0))
+    var param_owned = alloc(Layout[MoPlugParamDescriptor](count=1))
+    var params = param_owned^.unsafe_leak()
+    params.unsafe_offset(0).unsafe_write(MoPlugParamDescriptor(0, leak_c_str("Gain"), leak_c_str("dB"), 0.5, 0, 1))
+    var desc = MoPlugDescriptor(
+        leak_c_str("testing.com.whatever"),
+        leak_c_str("Testing Gain"),
+        leak_c_str("0.0.1"),
+        leak_c_str("Company"),
+        leak_c_str("website.com"),
+        leak_c_str("email@email.com"),
+        2,
+        buses,
+        1,
+        params,
+    )
+
+    var allocation = alloc(Layout[MoPlugDescriptor](count=1))
+    var pointer = allocation^.unsafe_leak()
+    pointer.unsafe_write(desc)
+
+    return pointer.as_imm().unsafe_origin_cast[ImmUntrackedOrigin]()
+
+

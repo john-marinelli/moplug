@@ -1,5 +1,6 @@
 #include "controller.h"
 
+#include "bridge.h"
 #include "ids.h"
 
 #include "pluginterfaces/base/ustring.h"
@@ -10,6 +11,18 @@ namespace MoPlugVst3 {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
+Controller::Controller(const MoPlugDescriptor* descriptor) 
+    : descriptor_(descriptor)
+{
+}
+
+Steinberg::FUnknown* Controller::createInstance(void* context) 
+{
+    auto* descriptor = static_cast<const MoPlugDescriptor*>(context);
+
+    return static_cast<Steinberg::Vst::IEditController*>(new Controller(descriptor));
+}
+
 tresult PLUGIN_API Controller::initialize(FUnknown* context)
 {
     const auto result = EditController::initialize(context);
@@ -17,14 +30,19 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context)
     if (result != kResultOk)
         return result;
 
-    parameters.addParameter(
-        STR16("Gain"),
-        STR16(""),
-        0,
-        1.0,
-        ParameterInfo::kCanAutomate,
-        kGainParameter
-    );
+    for (uint32_t i = 0; i < descriptor_->param_count; i++)
+    {
+        const auto& param = descriptor_->params[i];
+
+        Steinberg::Vst::ParameterInfo info {};
+
+        info.id = param.id;
+        info.stepCount = param.step_count;
+        info.defaultNormalizedValue = param.default_value;
+        info.flags = Steinberg::Vst::ParameterInfo::kCanAutomate;
+
+        parameters.addParameter(info);
+    }
 
     return kResultOk;
 }
