@@ -143,6 +143,10 @@ typedef struct MoPlugDescriptor
     const char* display_name;
     const char* version;
 
+    const char* company;
+    const char* website;
+    const char* email;
+
     uint32_t bus_count;
     const MoPlugBusDescriptor* buses;
 
@@ -164,6 +168,8 @@ const MoPlugDescriptor* mojo_get_plugin_descriptor();
 
 MojoDSPHandle mojo_dsp_create();
 
+void mojo_runtime_initialize(void);
+
 void mojo_dsp_destroy(MojoDSPHandle handle);
 
 void mojo_dsp_prepare(
@@ -178,9 +184,9 @@ void mojo_dsp_reset(
     MojoDSPHandle handle
 );
 
-void mojo_dsp_process_f32(
+void mojo_dsp_process(
     MojoDSPHandle handle,
-    VstAudioBlock* block
+    MoPlugProcessData* block
 );
 
 void mojo_dsp_set_parameter(

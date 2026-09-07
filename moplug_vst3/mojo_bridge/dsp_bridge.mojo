@@ -46,10 +46,13 @@ struct DspBridge:
 
     def process(
         mut self,
-        mut block: MoPlugProcessData,
+        block: Pointer[MoPlugProcessData, MutUntrackedOrigin],
     ):
-        ref in_bus = block.inputs[unsafe_offset=0]
-        ref out_bus = block.outputs[unsafe_offset=0]
+        for i in range(block[].input_param_count):
+            self.set_parameter(block[].input_params[unsafe_offset=i].id, block[].input_params[unsafe_offset=i].value)
+
+        ref in_bus = block[].inputs[unsafe_offset=0]
+        ref out_bus = block[].outputs[unsafe_offset=0]
 
         var channels = in_bus.channel_count
         if out_bus.channel_count < channels:
@@ -59,7 +62,7 @@ struct DspBridge:
             var input = in_bus.channels[unsafe_offset=channel]
             var output = out_bus.channels[unsafe_offset=channel]
 
-            for frame in range(block.frames):
+            for frame in range(block[].frames):
                 output[unsafe_offset=frame] = (input[unsafe_offset=frame] * self.gain)
 
 
@@ -107,6 +110,6 @@ def set_dsp_parameter(
 
 def process_dsp(
     pointer: DspPointer,
-    mut block: VstAudioBlock,
+    block: Pointer[MoPlugProcessData, MutUntrackedOrigin],
 ):
     pointer[].process(block)

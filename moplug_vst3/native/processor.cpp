@@ -8,6 +8,7 @@
 #include "pluginterfaces/vst/vsttypes.h"
 
 #include <vector>
+#include <algorithm>
 
 namespace MoPlugVst3 {
 
@@ -36,7 +37,7 @@ Steinberg::FUnknown* Processor::createInstance(void* context)
     );
 }
 
-static Steinberg::Vst::SpeakerArrangement speakerArrangementForChannels(int32_t channels)
+Steinberg::Vst::SpeakerArrangement Processor::speakerArrangementForChannels(int32_t channels)
 {
     switch (channels)
     {
@@ -405,7 +406,7 @@ tresult PLUGIN_API Processor::process(
     block.output_param_capacity = static_cast<int32>(output_params_.size());
     block.output_param_count = 0;
 
-    // TODO: call plugin
+    mojo_dsp_process(mojo_, &block);
     
     const int32 genEventCount = std::min(block.output_event_count, block.output_event_capacity);
     const int32 genParamCount = std::min(block.output_param_count, block.output_param_capacity);
@@ -433,6 +434,7 @@ tresult PLUGIN_API Processor::process(
                     destination.noteOn.tuning = 0.f;
                     destination.noteOn.length = 0;
                     data.outputEvents->addEvent(destination);
+                    break;
                 }
                 case MOPLUG_EVENT_NOTE_OFF:
                 {
@@ -443,6 +445,7 @@ tresult PLUGIN_API Processor::process(
                     destination.noteOff.velocity = source.value;
                     destination.noteOff.tuning = 0.f;
                     data.outputEvents->addEvent(destination);
+                    break;
                 }
                 case MOPLUG_EVENT_POLY_PRESSURE:
                 {
@@ -452,6 +455,7 @@ tresult PLUGIN_API Processor::process(
                     destination.polyPressure.noteId = source.note_id;
                     destination.polyPressure.pressure = source.value;
                     data.outputEvents->addEvent(destination);
+                    break;
                 }
 
             }

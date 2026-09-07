@@ -1,4 +1,4 @@
-from std.memory import Pointer, bitcast
+from std.memory import Pointer, bitcast, Layout, alloc
 from std.origin import MutUntrackedOrigin, ImmUntrackedOrigin
 from std.traits import ImplicitlyCopyable
 
@@ -9,15 +9,27 @@ comptime VstAudioBlockPtr = Pointer[VstAudioBlock, MutUntrackedOrigin]
 comptime VoidDoublePtr = Pointer[Pointer[NoneType, MutUntrackedOrigin], MutUntrackedOrigin]
 comptime F32ChannelsPtr = Pointer[Pointer[Float32, MutUntrackedOrigin], MutUntrackedOrigin]
 comptime F64ChannelsPtr = Pointer[Pointer[Float64, MutUntrackedOrigin], MutUntrackedOrigin]
+comptime ImmCStr = Pointer[UInt8, ImmUntrackedOrigin]
 
 comptime MoPlugSampleFormat = Int32
 comptime MoPlugEventType = Int32
 comptime MoPlugBusType = Int32
 comptime MoPlugBusDirection = Int32
 
+def leak_c_str(text: String) -> ImmCStr:
+    var bytes = text.as_bytes()
+    var owned = alloc(Layout[UInt8](count=text.byte_length()+1))
+    var ptr = owned^.unsafe_leak()
+
+    for i in range(text.byte_length()):
+        ptr[unsafe_offset=i] = bytes[i]
+    ptr[unsafe_offset=text.byte_length()] = 0
+
+    return ptr.as_imm().unsafe_origin_cast[ImmUntrackedOrigin]()
+
 @fieldwise_init
 struct MoPlugBusDescriptor:
-    var name: String
+    var name: ImmCStr
 
     var type: MoPlugBusType
     var direction: MoPlugBusDirection
@@ -30,8 +42,8 @@ struct MoPlugBusDescriptor:
 struct MoPlugParamDescriptor:
     var id: UInt32
 
-    var name: String
-    var units: String
+    var name: ImmCStr
+    var units: ImmCStr
 
     var default_value: Float64
 
@@ -40,12 +52,16 @@ struct MoPlugParamDescriptor:
 
 
 @fieldwise_init
-struct MoPlugDescriptor:
-    var stable_id: String
-    var display_name: String
-    var version: String
+struct MoPlugDescriptor(ImplicitlyCopyable):
+    var stable_id: ImmCStr
+    var display_name: ImmCStr
+    var version: ImmCStr
 
-    var bus_count: Int32
+    var company: ImmCStr
+    var website: ImmCStr
+    var email: ImmCStr
+
+    var bus_count: UInt32
     var buses: Pointer[MoPlugBusDescriptor, ImmUntrackedOrigin]
 
     var param_count: UInt32
@@ -89,7 +105,7 @@ struct MoPlugEvent:
 
 @fieldwise_init
 struct MoPlugParamChange:
-    var id: Int32
+    var id: UInt32
     var value: Float64
     var sample_offset: Int32
 
@@ -118,7 +134,7 @@ struct MoPlugProcessData:
     var frames: Int32
     var sample_format: MoPlugSampleFormat
 
-    var inputs: Pointer[MoPlugAudioBusF32, MutUntrackedOrigin]
+    var inputs: Pointer[MoPlugAudioBusF32, ImmUntrackedOrigin]
     var input_bus_count: Int32
     
     var outputs: Pointer[MoPlugAudioBusF32, MutUntrackedOrigin]
@@ -131,7 +147,14 @@ struct MoPlugProcessData:
     var output_event_capacity: Int32
     var output_event_count: Int32
 
-    var transport: Pointer[MoPlugEvent, MutUntrackedOrigin]
+    var input_params: Pointer[MoPlugParamChange, ImmUntrackedOrigin]
+    var input_param_count: Int32
+
+    var output_params: Pointer[MoPlugParamChange, MutUntrackedOrigin]
+    var output_param_capacity: Int32
+    var output_param_count: Int32
+
+    var transport: Pointer[MoPlugTransport, MutUntrackedOrigin]
 
     def __init__(
         out self,
@@ -146,7 +169,12 @@ struct MoPlugProcessData:
         output_events: Pointer[MoPlugEvent, MutUntrackedOrigin],
         output_event_capacity: Int32,
         output_event_count: Int32,
-        transport: Pointer[MoPlugEvent, MutUntrackedOrigin],
+        input_params: Pointer[MoPlugParamChange, ImmUntrackedOrigin],
+        input_param_count: Int32,
+        output_params: Pointer[MoPlugParamChange, MutUntrackedOrigin],
+        output_param_capacity: Int32,
+        output_param_count: Int32,
+        transport: Pointer[MoPlugTransport, MutUntrackedOrigin],
     ):
         self.frames = frames
         self.sample_format = sample_format
@@ -159,6 +187,11 @@ struct MoPlugProcessData:
         self.output_events = output_events
         self.output_event_capacity = output_event_capacity
         self.output_event_count = output_event_count
+        self.input_params = input_params
+        self.input_param_count = input_param_count
+        self.output_params = output_params
+        self.output_param_count = output_param_count
+        self.output_param_capacity = output_param_capacity
         self.transport = transport
 
 
